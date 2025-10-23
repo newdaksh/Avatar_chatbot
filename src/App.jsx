@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import ChatBox from "./components/ChatBox";
 import Avatar from "./components/Avatar";
+import Avatar3D from "./components/Avatar3D";
 import Subtitle from "./components/Subtitle";
+import ModelSetupGuide from "./components/ModelSetupGuide";
 import * as ttsManager from "./utils/ttsManager";
 import * as visemeEngine from "./utils/visemeEngine";
 import * as llmStub from "./utils/llmStub";
@@ -20,6 +22,8 @@ function App() {
   const [voiceRate, setVoiceRate] = useState(1.0);
   const [wordsPerMinute, setWordsPerMinute] = useState(160);
   const [useOpenAI, setUseOpenAI] = useState(false);
+  const [use3DAvatar, setUse3DAvatar] = useState(true); // Toggle between 2D and 3D avatar
+  const [showSetupGuide, setShowSetupGuide] = useState(false);
 
   // Check for speechSynthesis support
   const [ttsSupported, setTtsSupported] = useState(true);
@@ -68,30 +72,46 @@ function App() {
       return;
     }
 
-    setIsSpeaking(true);
+    // First, estimate the duration and build timeline BEFORE starting speech
+    const estimatedDurationMs = (reply.text.split(' ').length / wordsPerMinute) * 60 * 1000;
+    const timeline = visemeEngine.buildTimeline(
+      reply.text,
+      estimatedDurationMs,
+      wordsPerMinute
+    );
+
+    console.log('📊 Timeline created (pre-speech):', {
+      text: reply.text,
+      estimatedDuration: estimatedDurationMs,
+      frames: timeline.length,
+      firstFrames: timeline.slice(0, 3)
+    });
+
+    // Set timeline FIRST, then set isSpeaking
+    setLastTimeline(timeline);
+    setSubtitleDuration(estimatedDurationMs);
     setCurrentEmotion(reply.emotion);
     setCurrentSubtitle(reply.text);
+    
+    // Small delay to ensure state is updated before animation starts
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    setIsSpeaking(true);
 
     try {
-      // Start speech synthesis
+      // Start speech synthesis (this happens AFTER timeline is set)
       const speechResult = await ttsManager.speak(reply.text, {
         rate: voiceRate,
         voiceName: null, // Use default voice
       });
 
-      // Build viseme timeline based on actual or estimated duration
-      const audioDurationMs = speechResult.audioDuration * 1000;
-      const timeline = visemeEngine.buildTimeline(
-        reply.text,
-        audioDurationMs,
-        wordsPerMinute
-      );
-
-      setLastTimeline(timeline);
-      setSubtitleDuration(audioDurationMs);
+      console.log('🎵 Speech completed. Actual duration:', speechResult.audioDuration);
     } catch (error) {
-      console.error("Speech error:", error);
-      alert("Speech synthesis failed. Please try again.");
+      console.error("❌ Speech error:", error);
+      // Don't show alert for common errors, just log them
+      if (error.message && !error.message.includes('interrupted')) {
+        console.warn('⚠️ Non-critical speech error, continuing...');
+      }
     } finally {
       // Cleanup after speech ends
       setTimeout(() => {
@@ -181,6 +201,39 @@ function App() {
               </label>
             </div>
 
+            <div className="control-group">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={use3DAvatar}
+                  onChange={(e) => setUse3DAvatar(e.target.checked)}
+                />
+                Use 3D Realistic Avatar (MediaPipe + Three.js)
+              </label>
+            </div>
+
+            {use3DAvatar && (
+              <div className="info-box" style={{ marginTop: '10px' }}>
+                <p style={{ margin: '0 0 10px 0', fontSize: '0.9em' }}>
+                  📦 Need to setup a 3D model?
+                </p>
+                <button
+                  onClick={() => setShowSetupGuide(true)}
+                  style={{
+                    padding: '8px 16px',
+                    background: '#667eea',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '0.9em'
+                  }}
+                >
+                  Open Setup Guide
+                </button>
+              </div>
+            )}
+
             {!ttsSupported && (
               <div className="warning-box">
                 ⚠️ Text-to-speech is not supported in your browser.
@@ -192,12 +245,20 @@ function App() {
         {/* Right Column: Avatar and Subtitles */}
         <div className="avatar-column">
           <div className="avatar-container">
-            <Avatar
-              timeline={lastTimeline}
-              isSpeaking={isSpeaking}
-              emotion={currentEmotion}
-              onAnimationEnd={handleAnimationEnd}
-            />
+            {use3DAvatar ? (
+              <Avatar3D
+                timeline={lastTimeline}
+                isSpeaking={isSpeaking}
+                onModelLoaded={(morphs) => console.log('3D Avatar ready with morphs:', morphs)}
+              />
+            ) : (
+              <Avatar
+                timeline={lastTimeline}
+                isSpeaking={isSpeaking}
+                emotion={currentEmotion}
+                onAnimationEnd={handleAnimationEnd}
+              />
+            )}
           </div>
 
           <div className="subtitle-container">
@@ -209,6 +270,11 @@ function App() {
           </div>
         </div>
       </div>
+
+      {/* Model Setup Guide Modal */}
+      {showSetupGuide && (
+        <ModelSetupGuide onClose={() => setShowSetupGuide(false)} />
+      )}
     </div>
   );
 }

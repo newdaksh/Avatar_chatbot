@@ -22,83 +22,105 @@ export function speak(text, opts = {}) {
       return;
     }
 
-    // Stop any ongoing speech
-    stop();
-
-    // Create utterance
-    currentUtterance = new SpeechSynthesisUtterance(text);
-
-    // Apply options
-    currentUtterance.rate = opts.rate || 1.0;
-    currentUtterance.pitch = opts.pitch || 1.0;
-    currentUtterance.volume = opts.volume || 1.0;
-
-    // Set voice if specified
-    if (opts.voiceName) {
-      const voices = window.speechSynthesis.getVoices();
-      const selectedVoice = voices.find((v) => v.name === opts.voiceName);
-      if (selectedVoice) {
-        currentUtterance.voice = selectedVoice;
-      }
+    // Stop any ongoing speech first
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      console.log('🛑 Stopping previous speech...');
+      window.speechSynthesis.cancel();
+      // Give it time to fully stop
+      setTimeout(() => startSpeech(), 100);
+    } else {
+      startSpeech();
     }
 
-    // Track actual start time
-    let actualStartTime = null;
-    let actualEndTime = null;
+    function startSpeech() {
+      // Create utterance
+      currentUtterance = new SpeechSynthesisUtterance(text);
 
-    // Event: Speech started
-    currentUtterance.onstart = () => {
-      actualStartTime = performance.now();
-      console.log("Speech started");
-    };
+      // Apply options
+      currentUtterance.rate = opts.rate || 1.0;
+      currentUtterance.pitch = opts.pitch || 1.0;
+      currentUtterance.volume = opts.volume || 1.0;
 
-    // Event: Speech ended successfully
-    currentUtterance.onend = () => {
-      actualEndTime = performance.now();
-
-      // Calculate actual duration if we have timestamps
-      let audioDuration;
-      if (actualStartTime && actualEndTime) {
-        audioDuration = (actualEndTime - actualStartTime) / 1000; // Convert to seconds
-      } else {
-        // Fallback: estimate duration based on word count
-        audioDuration = estimateDuration(text, opts.rate || 1.0);
+      // Set voice if specified
+      if (opts.voiceName) {
+        const voices = window.speechSynthesis.getVoices();
+        const selectedVoice = voices.find((v) => v.name === opts.voiceName);
+        if (selectedVoice) {
+          currentUtterance.voice = selectedVoice;
+        }
       }
 
-      console.log(`Speech ended. Duration: ${audioDuration.toFixed(2)}s`);
-      resolve({ audioDuration });
-    };
+      // Track actual start time
+      let actualStartTime = null;
+      let actualEndTime = null;
+      let resolved = false;
 
-    // Event: Speech error
-    currentUtterance.onerror = (event) => {
-      console.error("Speech error:", event);
-      reject(new Error(`Speech synthesis error: ${event.error}`));
-    };
+      // Event: Speech started
+      currentUtterance.onstart = () => {
+        actualStartTime = performance.now();
+        console.log("🎤 Speech started");
+      };
 
-    // Optional: Boundary events (not all browsers support this reliably)
-    // These fire at word boundaries and can be used for more precise timing
-    currentUtterance.onboundary = (event) => {
-      // event.charIndex, event.charLength, event.elapsedTime available
-      // Could be used for more sophisticated lip-sync in the future
-      console.log(
-        `Boundary at char ${event.charIndex}, elapsed: ${event.elapsedTime}ms`
-      );
-    };
+      // Event: Speech ended successfully
+      currentUtterance.onend = () => {
+        if (resolved) return;
+        resolved = true;
+        
+        actualEndTime = performance.now();
 
-    // Start speech
-    window.speechSynthesis.speak(currentUtterance);
+        // Calculate actual duration if we have timestamps
+        let audioDuration;
+        if (actualStartTime && actualEndTime) {
+          audioDuration = (actualEndTime - actualStartTime) / 1000; // Convert to seconds
+        } else {
+          // Fallback: estimate duration based on word count
+          audioDuration = estimateDuration(text, opts.rate || 1.0);
+        }
 
-    // Fallback timeout: if speech doesn't fire onend within reasonable time
-    const estimatedDuration = estimateDuration(text, opts.rate || 1.0);
-    const timeoutMs = (estimatedDuration + 5) * 1000; // Add 5 second buffer
+        console.log(`✅ Speech ended. Duration: ${audioDuration.toFixed(2)}s`);
+        resolve({ audioDuration });
+      };
 
-    setTimeout(() => {
-      if (window.speechSynthesis.speaking) {
-        console.warn("Speech timeout - forcing stop");
-        stop();
-        reject(new Error("Speech timeout"));
-      }
-    }, timeoutMs);
+      // Event: Speech error - handle gracefully
+      currentUtterance.onerror = (event) => {
+        if (resolved) return;
+        resolved = true;
+        
+        console.warn(`⚠️ Speech error: ${event.error}`);
+        
+        // If interrupted, that's expected - still resolve with estimated duration
+        if (event.error === 'interrupted' || event.error === 'canceled') {
+          const estimatedDuration = estimateDuration(text, opts.rate || 1.0);
+          console.log(`Using estimated duration: ${estimatedDuration.toFixed(2)}s`);
+          resolve({ audioDuration: estimatedDuration });
+        } else {
+          // For other errors, reject
+          reject(new Error(`Speech synthesis error: ${event.error}`));
+        }
+      };
+
+      // Optional: Boundary events (not all browsers support this reliably)
+      currentUtterance.onboundary = (event) => {
+        // Removed verbose logging to reduce console spam
+      };
+
+      // Start speech
+      console.log('🎬 Starting speech synthesis...');
+      window.speechSynthesis.speak(currentUtterance);
+
+      // Fallback timeout: if speech doesn't fire onend within reasonable time
+      const estimatedDuration = estimateDuration(text, opts.rate || 1.0);
+      const timeoutMs = (estimatedDuration + 5) * 1000; // Add 5 second buffer
+
+      setTimeout(() => {
+        if (!resolved && window.speechSynthesis.speaking) {
+          console.warn("⏱️ Speech timeout - forcing stop");
+          resolved = true;
+          stop();
+          resolve({ audioDuration: estimatedDuration });
+        }
+      }, timeoutMs);
+    }
   });
 }
 
