@@ -22,6 +22,7 @@ function App() {
   const [voiceRate, setVoiceRate] = useState(1.0);
   const [wordsPerMinute, setWordsPerMinute] = useState(160);
   const [useOpenAI, setUseOpenAI] = useState(false);
+  const [useOllama, setUseOllama] = useState(true); // Use Ollama by default
   const [use3DAvatar, setUse3DAvatar] = useState(true); // Toggle between 2D and 3D avatar
   const [showSetupGuide, setShowSetupGuide] = useState(false);
 
@@ -48,7 +49,7 @@ function App() {
     setInputText("");
 
     // Get bot reply
-    const botReply = await llmStub.getReply(text, useOpenAI);
+    const botReply = await llmStub.getReply(text, useOpenAI, useOllama);
     const botMessage = {
       from: "bot",
       text: botReply.text,
@@ -194,8 +195,27 @@ function App() {
               <label>
                 <input
                   type="checkbox"
+                  checked={useOllama}
+                  onChange={(e) => {
+                    setUseOllama(e.target.checked);
+                    // Disable OpenAI when enabling Ollama
+                    if (e.target.checked) setUseOpenAI(false);
+                  }}
+                />
+                Use Ollama (local LLM at localhost:11434)
+              </label>
+            </div>
+
+            <div className="control-group">
+              <label>
+                <input
+                  type="checkbox"
                   checked={useOpenAI}
-                  onChange={(e) => setUseOpenAI(e.target.checked)}
+                  onChange={(e) => {
+                    setUseOpenAI(e.target.checked);
+                    // Disable Ollama when enabling OpenAI
+                    if (e.target.checked) setUseOllama(false);
+                  }}
                 />
                 Use OpenAI (requires API key in llmStub.js)
               </label>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ollama Connection Tester</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .container {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 15px;
+      padding: 30px;
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+    }
+    h1 {
+      margin-top: 0;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 5px;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    button:disabled {
+      background: #cccccc;
+      cursor: not-allowed;
+    }
+    #output {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      min-height: 200px;
+      font-family: 'Courier New', monospace;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .status {
+      display: inline-block;
+      padding: 5px 15px;
+      border-radius: 20px;
+      margin: 10px 0;
+      font-weight: bold;
+    }
+    .status.success {
+      background: #4CAF50;
+    }
+    .status.error {
+      background: #f44336;
+    }
+    .status.info {
+      background: #2196F3;
+    }
+    input {
+      width: calc(100% - 24px);
+      padding: 10px;
+      border-radius: 8px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      font-size: 14px;
+      margin: 10px 0;
+    }
+    input::placeholder {
+      color: rgba(255, 255, 255, 0.6);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🤖 Ollama Connection Tester</h1>
+    <p>Test if Ollama is running and responding correctly</p>
+
+    <div>
+      <button onclick="testConnection()">1. Test Connection</button>
+      <button onclick="listModels()">2. List Models</button>
+      <button onclick="testGenerate()">3. Test Generate</button>
+    </div>
+
+    <div>
+      <input 
+        type="text" 
+        id="customPrompt" 
+        placeholder="Type a custom prompt to test..."
+        value="Say hello in a friendly way!"
+      >
+      <button onclick="testCustomPrompt()">Send Custom Prompt</button>
+    </div>
+
+    <div>
+      <label>Model: </label>
+      <input 
+        type="text" 
+        id="modelName" 
+        placeholder="Model name (e.g., llama2, mistral)"
+        value="llama2"
+        style="width: 200px;"
+      >
+    </div>
+
+    <div id="output">Click a button to test Ollama connection...</div>
+  </div>
+
+  <script>
+    const OLLAMA_URL = 'http://localhost:11434';
+    const output = document.getElementById('output');
+
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const statusClass = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+      output.innerHTML += `\n[${timestamp}] <span class="status ${statusClass}">${type.toUpperCase()}</span>\n${message}\n`;
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function clearOutput() {
+      output.innerHTML = '';
+    }
+
+    async function testConnection() {
+      clearOutput();
+      log('Testing connection to Ollama...', 'info');
+      
+      try {
+        const response = await fetch(`${OLLAMA_URL}/api/tags`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          log('✅ Connection successful!', 'success');
+          log(`Found ${data.models?.length || 0} models installed.`);
+          return true;
+        } else {
+          log(`❌ Connection failed: ${response.status} ${response.statusText}`, 'error');
+          return false;
+        }
+      } catch (error) {
+        log(`❌ Connection error: ${error.message}`, 'error');
+        log('\n💡 Make sure Ollama is running:\n   ollama serve', 'info');
+        return false;
+      }
+    }
+
+    async function listModels() {
+      clearOutput();
+      log('Fetching installed models...', 'info');
+      
+      try {
+        const response = await fetch(`${OLLAMA_URL}/api/tags`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.models && data.models.length > 0) {
+          log('✅ Models found:', 'success');
+          data.models.forEach(model => {
+            log(`  📦 ${model.name} (${(model.size / 1e9).toFixed(2)} GB)`);
+          });
+        } else {
+          log('⚠️ No models installed', 'error');
+          log('\n💡 Install a model:\n   ollama pull llama2', 'info');
+        }
+      } catch (error) {
+        log(`❌ Error: ${error.message}`, 'error');
+      }
+    }
+
+    async function testGenerate() {
+      await testCustomPromptWithMessage('Hello! How are you?');
+    }
+
+    async function testCustomPrompt() {
+      const prompt = document.getElementById('customPrompt').value;
+      if (!prompt.trim()) {
+        log('⚠️ Please enter a prompt', 'error');
+        return;
+      }
+      await testCustomPromptWithMessage(prompt);
+    }
+
+    async function testCustomPromptWithMessage(promptText) {
+      clearOutput();
+      const modelName = document.getElementById('modelName').value || 'llama2';
+      
+      log(`Testing text generation with model: ${modelName}...`, 'info');
+      log(`Prompt: "${promptText}"`, 'info');
+      
+      try {
+        const startTime = Date.now();
+        
+        const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: modelName,
+            prompt: promptText,
+            stream: false,
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        
+        log('✅ Generation successful!', 'success');
+        log(`Response time: ${duration}s`);
+        log(`\n📝 Response:\n"${data.response}"`, 'success');
+        
+        if (data.total_duration) {
+          log(`\n⏱️ Total duration: ${(data.total_duration / 1e9).toFixed(2)}s`);
+        }
+        
+      } catch (error) {
+        log(`❌ Generation error: ${error.message}`, 'error');
+        
+        if (error.message.includes('404')) {
+          log(`\n💡 Model "${modelName}" not found. Try:\n   ollama pull ${modelName}`, 'info');
+        }
+      }
+    }
+
+    // Auto-test on load
+    window.addEventListener('load', () => {
+      setTimeout(testConnection, 500);
+    });
+  </script>
+</body>
+</html>

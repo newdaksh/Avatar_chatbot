@@ -1,7 +1,8 @@
 /**
  * LLM Stub
- * Provides chatbot responses using local logic or optional OpenAI integration
- * Default: Simple pattern-matching and canned responses
+ * Provides chatbot responses using Ollama, local logic, or optional OpenAI integration
+ * Default: Ollama API (http://localhost:11434/api/generate)
+ * Fallback: Simple pattern-matching and canned responses
  * Optional: OpenAI ChatCompletion API
  */
 
@@ -9,11 +10,14 @@
  * Get a reply to user input
  * @param {string} userText - User's message
  * @param {boolean} useOpenAI - Whether to use OpenAI API (requires API key)
+ * @param {boolean} useOllama - Whether to use Ollama API (default: true)
  * @returns {Promise<{text: string, emotion: string}>} - Reply with text and emotion
  */
-export async function getReply(userText, useOpenAI = false) {
+export async function getReply(userText, useOpenAI = false, useOllama = true) {
   if (useOpenAI) {
     return await getOpenAIReply(userText);
+  } else if (useOllama) {
+    return await getOllamaReply(userText);
   } else {
     return getLocalReply(userText);
   }
@@ -116,6 +120,64 @@ async function getLocalReply(userText) {
     text: `You asked: "${userText}". That's an interesting question! While I'm a simple demo chatbot, I can tell you that I'm here to demonstrate lip-sync animation. My mouth movements are synchronized to my speech using a viseme timeline. Pretty neat, isn't it?`,
     emotion: "neutral",
   };
+}
+
+/**
+ * Ollama API integration (default)
+ * Connects to local Ollama instance for LLM responses
+ * 
+ * INSTRUCTIONS:
+ * 1. Make sure Ollama is installed and running (https://ollama.ai)
+ * 2. Pull a model: `ollama pull llama2` (or any model you prefer)
+ * 3. The service should be running at http://localhost:11434
+ * 
+ * @param {string} userText - User's message
+ * @returns {Promise<{text: string, emotion: string}>} - Reply object
+ */
+async function getOllamaReply(userText) {
+  const OLLAMA_API_URL = "http://localhost:11434/api/generate";
+  
+  try {
+    console.log("🤖 Calling Ollama API...");
+    
+    const response = await fetch(OLLAMA_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-oss:120b-cloud", // Change this to your preferred model
+        prompt: `You are a friendly, helpful chatbot avatar. Keep responses concise (2-3 sentences) and engaging. Be enthusiastic and warm.
+
+User: ${userText}
+Assistant:`,
+        stream: false,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`Ollama API error: ${response.status}. Falling back to local replies.`);
+      return getLocalReply(userText);
+    }
+
+    const data = await response.json();
+    const replyText = data.response.trim();
+
+    console.log("✅ Ollama response received:", replyText);
+
+    // Infer emotion from reply content
+    const emotion = inferEmotion(replyText);
+
+    return {
+      text: replyText,
+      emotion: emotion,
+    };
+  } catch (error) {
+    console.error("Ollama API call failed:", error);
+    console.log("💡 Make sure Ollama is running: ollama serve");
+    // Fallback to local reply on error
+    return getLocalReply(userText);
+  }
 }
 
 /**
