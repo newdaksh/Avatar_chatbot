@@ -1,7 +1,7 @@
 /**
  * LLM Stub
- * Provides chatbot responses using Ollama, local logic, or optional OpenAI integration
- * Default: Ollama API (http://localhost:11434/api/generate)
+ * Provides chatbot responses using GROQ, local logic, or optional OpenAI integration
+ * Default: GROQ API (https://api.groq.com/openai/v1/chat/completions)
  * Fallback: Simple pattern-matching and canned responses
  * Optional: OpenAI ChatCompletion API
  */
@@ -10,15 +10,20 @@
  * Get a reply to user input
  * @param {string} userText - User's message
  * @param {boolean} useOpenAI - Whether to use OpenAI API (requires API key)
- * @param {boolean} useOllama - Whether to use Ollama API (default: true)
+ * @param {boolean} useGroq - Whether to use GROQ API (default: true)
  * @returns {Promise<{text: string, emotion: string}>} - Reply with text and emotion
  */
-export async function getReply(userText, useOpenAI = false, useOllama = true) {
+export async function getReply(userText, useOpenAI = false, useGroq = true) {
+  console.log("🔍 getReply called with:", { userText, useOpenAI, useGroq });
+  
   if (useOpenAI) {
+    console.log("📤 Using OpenAI");
     return await getOpenAIReply(userText);
-  } else if (useOllama) {
-    return await getOllamaReply(userText);
+  } else if (useGroq) {
+    console.log("📤 Using GROQ");
+    return await getGroqReply(userText);
   } else {
+    console.log("📤 Using Local replies");
     return getLocalReply(userText);
   }
 }
@@ -123,47 +128,65 @@ async function getLocalReply(userText) {
 }
 
 /**
- * Ollama API integration (default)
- * Connects to local Ollama instance for LLM responses
+ * GROQ API integration (default)
+ * Connects to GROQ API for fast LLM responses
  * 
  * INSTRUCTIONS:
- * 1. Make sure Ollama is installed and running (https://ollama.ai)
- * 2. Pull a model: `ollama pull llama2` (or any model you prefer)
- * 3. The service should be running at http://localhost:11434
+ * 1. Get an API key from https://console.groq.com/
+ * 2. Add your API key to the .env file as VITE_GROQ_API_KEY
+ * 3. The service uses https://api.groq.com/openai/v1/chat/completions
  * 
  * @param {string} userText - User's message
  * @returns {Promise<{text: string, emotion: string}>} - Reply object
  */
-async function getOllamaReply(userText) {
-  const OLLAMA_API_URL = "http://localhost:11434/api/generate";
+async function getGroqReply(userText) {
+  // Get API key from environment variables
+  const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+  
+  console.log("🔑 GROQ API Key check:", GROQ_API_KEY ? "Key found (length: " + GROQ_API_KEY.length + ")" : "No key found");
+  
+  // Check if API key is set
+  if (!GROQ_API_KEY || GROQ_API_KEY === "your_groq_api_key_here") {
+    console.warn("GROQ API key not configured. Falling back to local replies.");
+    console.log("💡 Add your GROQ API key to the .env file as VITE_GROQ_API_KEY");
+    return getLocalReply(userText);
+  }
   
   try {
-    console.log("🤖 Calling Ollama API...");
+    console.log("🤖 Calling GROQ API...");
     
-    const response = await fetch(OLLAMA_API_URL, {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "gpt-oss:120b-cloud", // Change this to your preferred model
-        prompt: `You are a friendly, helpful chatbot avatar. Keep responses concise (2-3 sentences) and engaging. Be enthusiastic and warm.
-
-User: ${userText}
-Assistant:`,
-        stream: false,
+        model: "openai/gpt-oss-20b", // Fast GROQ model
+        messages: [
+          {
+            role: "system",
+            content: "You are a friendly, helpful chatbot avatar. Keep responses concise (2-3 sentences) and engaging. Be enthusiastic and warm.",
+          },
+          {
+            role: "user",
+            content: userText,
+          },
+        ],
+        max_tokens: 150,
+        temperature: 0.7,
       }),
     });
 
     if (!response.ok) {
-      console.warn(`Ollama API error: ${response.status}. Falling back to local replies.`);
+      console.warn(`GROQ API error: ${response.status}. Falling back to local replies.`);
       return getLocalReply(userText);
     }
 
     const data = await response.json();
-    const replyText = data.response.trim();
+    const replyText = data.choices[0].message.content.trim();
 
-    console.log("✅ Ollama response received:", replyText);
+    console.log("✅ GROQ response received:", replyText);
 
     // Infer emotion from reply content
     const emotion = inferEmotion(replyText);
@@ -173,8 +196,8 @@ Assistant:`,
       emotion: emotion,
     };
   } catch (error) {
-    console.error("Ollama API call failed:", error);
-    console.log("💡 Make sure Ollama is running: ollama serve");
+    console.error("GROQ API call failed:", error);
+    console.log("💡 Make sure your GROQ API key is set in the .env file");
     // Fallback to local reply on error
     return getLocalReply(userText);
   }

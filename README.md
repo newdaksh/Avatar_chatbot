@@ -32,7 +32,7 @@ A cutting-edge web application featuring a **realistic 3D animated avatar** with
 This project creates an immersive conversational AI experience with a photorealistic 3D human avatar that:
 - **Speaks naturally** using browser's text-to-speech capabilities
 - **Lip-syncs perfectly** to every word using phonetic analysis and morph target animation
-- **Responds intelligently** via Ollama (local AI) or OpenAI integration
+- **Responds intelligently** via GROQ (fast cloud AI) or OpenAI integration
 - **Animates realistically** with idle behaviors like blinking and breathing
 - **Runs entirely in the browser** with no backend required (except for AI models)
 
@@ -50,7 +50,7 @@ Perfect for virtual assistants, educational tools, customer service bots, access
 - **Fallback 2D Mode**: Option to use simpler 2D avatar for lower-spec devices
 
 ### 🤖 AI & Conversation
-- **Ollama Integration**: Local AI model support (privacy-focused, no internet required)
+- **GROQ Integration**: Fast cloud AI model support with high performance inference
 - **OpenAI Support**: Optional integration with GPT models
 - **Emotion Detection**: Responses include emotional context for appropriate facial expressions
 - **Pattern Matching Fallback**: Works offline with pre-programmed responses
@@ -133,7 +133,7 @@ Perfect for virtual assistants, educational tools, customer service bots, access
 #### **LLM Stub** (`src/utils/llmStub.js`)
 - **Purpose**: Unified interface for multiple AI backends
 - **Supports**: 
-  - **Ollama** (default): Local AI models via HTTP API
+  - **GROQ** (default): Fast cloud AI models via API
   - **OpenAI**: GPT-3.5/4 integration
   - **Fallback**: Pattern-matching for offline use
 - **Returns**: Response text + detected emotion
@@ -176,7 +176,7 @@ App.jsx (Main Controller)
 ### Data Flow
 
 1. **User types message** → ChatBox captures input
-2. **Message sent to LLM** → Ollama/OpenAI/Local processing
+2. **Message sent to LLM** → GROQ/OpenAI/Local processing
 3. **Response generated** → Text + Emotion returned
 4. **Phonetic analysis** → Text broken into phonemes with timing
 5. **Viseme timeline created** → Mouth shapes mapped to timestamps
@@ -205,10 +205,10 @@ App.jsx (Main Controller)
 
 ### Optional (for AI features)
 
-4. **Ollama** (for local AI - recommended)
-   - Download: https://ollama.ai/
-   - Install model: `ollama pull llama2` or `ollama pull mistral`
-   - Runs locally, no internet needed after setup
+4. **GROQ API Key** (for fast cloud AI - recommended)
+   - Sign up: https://console.groq.com/
+   - Get API key from the dashboard
+   - Fast inference with llama3, mixtral, and other models
 
 5. **OpenAI API Key** (for GPT integration)
    - Sign up: https://platform.openai.com/
@@ -279,24 +279,18 @@ See `public/models/README.md` for detailed guides on:
 - MakeHuman
 - Custom Blender models
 
-### Step 4: Set Up Ollama (Optional but Recommended)
+### Step 4: Set Up GROQ API (Optional but Recommended)
 
-```bash
-# Install Ollama
-# Windows: Download from https://ollama.ai/download
-# Mac: brew install ollama
-# Linux: curl -fsSL https://ollama.ai/install.sh | sh
-
-# Pull a model
-ollama pull llama2
-# or for faster responses:
-ollama pull mistral
-```
-
-Verify it's running:
-```bash
-ollama list
-```
+1. Visit https://console.groq.com/ and create an account
+2. Get your API key from the dashboard
+3. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+4. Add your GROQ API key to the `.env` file:
+   ```
+   VITE_GROQ_API_KEY=your_actual_groq_api_key_here
+   ```
 
 ---
 
@@ -353,7 +347,7 @@ Avatar_chatbot/
 │   │   └── Subtitle.jsx       # Speech captions
 │   │
 │   ├── utils/                 # Core logic modules
-│   │   ├── llmStub.js        # AI integration (Ollama/OpenAI)
+│   │   ├── llmStub.js        # AI integration (GROQ/OpenAI)
 │   │   ├── phoneticAnalyzer.js # Text-to-phoneme conversion
 │   │   ├── ttsManager.js     # Speech synthesis wrapper
 │   │   └── visemeEngine.js   # Lip-sync timeline generator
@@ -375,7 +369,7 @@ Avatar_chatbot/
 - **`App.jsx`**: Orchestrates the entire application - manages state, coordinates components, handles message flow
 - **`Avatar3D.jsx`**: The heart of the 3D rendering - loads model, controls morph targets, runs animation loop
 - **`visemeEngine.js`**: Converts text to timed mouth shapes - critical for lip-sync accuracy
-- **`llmStub.js`**: Abstracts AI backends - easy to switch between Ollama/OpenAI/local responses
+- **`llmStub.js`**: Abstracts AI backends - easy to switch between GROQ/OpenAI/local responses
 - **`ttsManager.js`**: Manages speech synthesis - handles browser API quirks and timing
 
 ---
@@ -389,7 +383,7 @@ The chat interface provides these controls:
 1. **Voice Rate**: Speech speed (0.5x to 2.0x)
 2. **Words Per Minute**: Affects lip-sync timing (80-200 WPM)
 3. **AI Backend**:
-   - Use Ollama (local, private)
+   - Use GROQ (fast cloud AI, requires API key in .env)
    - Use OpenAI (requires API key)
    - Use local responses (offline)
 4. **Avatar Mode**:
@@ -409,14 +403,20 @@ const OPENAI_MODEL = 'gpt-4'; // or 'gpt-3.5-turbo'
 
 Then toggle "Use OpenAI" in the UI.
 
-#### Customize Ollama Settings
+#### Customize GROQ Settings
 
 In `src/utils/llmStub.js`:
 
 ```javascript
-const OLLAMA_API_URL = 'http://localhost:11434/api/generate';
-const OLLAMA_MODEL = 'llama2'; // or 'mistral', 'codellama', etc.
+// Change the model in getGroqReply function:
+model: "llama3-8b-8192", // or 'mixtral-8x7b-32768', 'gemma-7b-it', etc.
 ```
+
+Available GROQ models:
+- `llama3-8b-8192` (fast, 8K context)
+- `llama3-70b-8192` (more capable, 8K context) 
+- `mixtral-8x7b-32768` (32K context)
+- `gemma-7b-it` (Google's model)
 
 #### Adjust Animation Settings
 
@@ -524,15 +524,15 @@ Each morph target has a weight (0.0 to 1.0) that blends the shape.
 
 ### 4. AI Integration
 
-#### Ollama Flow
+#### GROQ Flow
 ```
-User Message → HTTP POST to localhost:11434
+User Message → HTTP POST to api.groq.com
                       ↓
-              Ollama processes locally
+              GROQ processes with fast inference
                       ↓
-              Streams response tokens
+              Returns JSON response
                       ↓
-              Returns complete response
+              Extract message content
 ```
 
 #### OpenAI Flow

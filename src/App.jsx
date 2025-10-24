@@ -22,7 +22,7 @@ function App() {
   const [voiceRate, setVoiceRate] = useState(1.0);
   const [wordsPerMinute, setWordsPerMinute] = useState(160);
   const [useOpenAI, setUseOpenAI] = useState(false);
-  const [useOllama, setUseOllama] = useState(true); // Use Ollama by default
+  const [useGroq, setUseGroq] = useState(true); // Use GROQ by default
   const [use3DAvatar, setUse3DAvatar] = useState(true); // Toggle between 2D and 3D avatar
   const [showSetupGuide, setShowSetupGuide] = useState(false);
 
@@ -48,8 +48,11 @@ function App() {
     setMessages((prev) => [...prev, userMessage]);
     setInputText("");
 
+    // Debug: Log the current settings
+    console.log("🔍 Debug - useOpenAI:", useOpenAI, "useGroq:", useGroq);
+
     // Get bot reply
-    const botReply = await llmStub.getReply(text, useOpenAI, useOllama);
+    const botReply = await llmStub.getReply(text, useOpenAI, useGroq);
     const botMessage = {
       from: "bot",
       text: botReply.text,
@@ -195,15 +198,19 @@ function App() {
               <label>
                 <input
                   type="checkbox"
-                  checked={useOllama}
+                  checked={useGroq}
                   onChange={(e) => {
-                    setUseOllama(e.target.checked);
-                    // Disable OpenAI when enabling Ollama
+                    setUseGroq(e.target.checked);
+                    // Disable OpenAI when enabling GROQ
                     if (e.target.checked) setUseOpenAI(false);
                   }}
                 />
-                Use Ollama (local LLM at localhost:11434)
+                Use GROQ (fast cloud LLM - requires API key in .env) 
+                {useGroq ? " ✅" : " ❌"}
               </label>
+              <div style={{fontSize: "12px", color: "#666", marginTop: "5px"}}>
+                API Key: {import.meta.env.VITE_GROQ_API_KEY ? "✅ Found" : "❌ Missing"}
+              </div>
             </div>
 
             <div className="control-group">
@@ -213,8 +220,8 @@ function App() {
                   checked={useOpenAI}
                   onChange={(e) => {
                     setUseOpenAI(e.target.checked);
-                    // Disable Ollama when enabling OpenAI
-                    if (e.target.checked) setUseOllama(false);
+                    // Disable GROQ when enabling OpenAI
+                    if (e.target.checked) setUseGroq(false);
                   }}
                 />
                 Use OpenAI (requires API key in llmStub.js)
